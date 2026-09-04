@@ -3,11 +3,11 @@ Command Line Interface for Fhir R4 Semantic Validator Agent.
 """
 import argparse
 import csv
-import json
+import os
 import sys
 from agents.models import SystemTaskPayload
 from agents.supervisor import SystemSupervisor
-from agents.base import AuditLogger
+from agents.base import AuditLogger, validate_safe_path
 
 supervisor = SystemSupervisor(model_provider="mock")
 
@@ -80,7 +80,9 @@ def main(argv=None):
         return 0
 
     if args.command == "batch":
-        with open(args.input, mode="r", encoding="utf-8-sig") as f:
+        safe_input = validate_safe_path(args.input, allowed_base=os.getcwd())
+        safe_output = validate_safe_path(args.output, allowed_base=os.getcwd())
+        with open(safe_input, mode="r", encoding="utf-8-sig") as f:
             reader = csv.DictReader(f)
             fieldnames = list(reader.fieldnames or [])
             rows = list(reader)
@@ -104,11 +106,11 @@ def main(argv=None):
             row_dict["audit_hash"] = dossier.audit_hash
             out_rows.append(row_dict)
 
-        with open(args.output, mode="w", encoding="utf-8", newline="") as f:
+        with open(safe_output, mode="w", encoding="utf-8", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=out_fields)
             writer.writeheader()
             writer.writerows(out_rows)
-        print(f"Processed {len(out_rows)} records -> {args.output}")
+        print(f"Processed {len(out_rows)} records -> {safe_output}")
         return 0
 
     if args.command == "serve":

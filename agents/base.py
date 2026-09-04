@@ -8,9 +8,12 @@ import json
 import time
 import hmac
 import hashlib
+import secrets
+import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
-from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 PHI_PATTERNS = [
     re.compile(r"\b(?:MRN|mrn)[:#\s-]*\d{4,10}\b", re.IGNORECASE),
@@ -31,6 +34,29 @@ class SecurityException(Exception):
 class ResourceLimitExceededException(Exception):
     """Raised when computational parameters exceed safety bounds."""
     pass
+
+
+class PathTraversalException(SecurityException):
+    """Raised when a file path attempts directory traversal outside allowed boundaries."""
+    pass
+
+
+def validate_safe_path(file_path: str, allowed_base: Optional[str] = None) -> str:
+    """Validate that a file path does not escape via traversal (e.g. ../../etc/passwd).
+
+    Returns the resolved, absolute path on success; raises PathTraversalException on violation.
+    """
+    import pathlib
+    resolved = pathlib.Path(file_path).resolve()
+    if allowed_base is not None:
+        base_resolved = pathlib.Path(allowed_base).resolve()
+        try:
+            resolved.relative_to(base_resolved)
+        except ValueError:
+            raise PathTraversalException(
+                f"Path '{file_path}' escapes allowed base directory '{allowed_base}'."
+            )
+    return str(resolved)
 
 
 def assert_no_phi(text: str) -> None:
@@ -57,7 +83,15 @@ class PHIGuard:
 class AuditTrail:
     """Cryptographic Tamper-Evident HMAC-SHA256 Audit Trail."""
     def __init__(self, secret_key: Optional[str] = None):
-        self.secret_key = (secret_key or os.getenv("AUDIT_SECRET_KEY", "fhir-r4-semantic-validator-agent-master-audit-key-2026")).encode("utf-8")
+        resolved_key = secret_key or os.getenv("AUDIT_SECRET_KEY")
+        if not resolved_key:
+            resolved_key = secrets.token_hex(32)
+            logger.warning(
+                "AUDIT_SECRET_KEY not set; generated an ephemeral key. "
+                "Audit signatures will not persist across restarts. "
+                "Set the AUDIT_SECRET_KEY environment variable in production."
+            )
+        self.secret_key = resolved_key.encode("utf-8")
         self.logs: List[Dict[str, Any]] = []
 
     def log(self, actor: str, actor_tier: str, event_type: str, details: Dict[str, Any]) -> Dict[str, Any]:
@@ -83,9 +117,19 @@ class AuditTrail:
         return entry
 
     def verify_integrity(self) -> bool:
+        """Verify the full audit chain: linkage + HMAC signature authenticity."""
         for i, entry in enumerate(self.logs):
+            # Check chain linkage
             prev = self.logs[i-1]["current_hash"] if i > 0 else "GENESIS_BLOCK_0000000000000000"
             if entry["prev_hash"] != prev:
+                return False
+            # Verify HMAC signature
+            sign_string = (
+                f"{entry['audit_id']}|{entry['timestamp']}|{entry['actor']}|"
+                f"{entry['actor_tier']}|{entry['event_type']}|{entry['payload_hash']}|{entry['prev_hash']}"
+            )
+            expected_sig = hmac.new(self.secret_key, sign_string.encode("utf-8"), hashlib.sha256).hexdigest()
+            if not hmac.compare_digest(expected_sig, entry["current_hash"]):
                 return False
         return True
 
