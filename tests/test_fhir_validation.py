@@ -24,6 +24,11 @@ def test_invalid_resource(bad):
     assert "error" in [i["severity"] for i in outcome["operationOutcome"]["issue"]]
 
 
+def test_malformed_bundle_type_and_contained_id():
+    assert not validate_fhir({"resourceType": "Bundle", "type": []})["valid"]
+    assert not validate_fhir({"resourceType": "Patient", "contained": [{"resourceType": "Patient", "id": []}]})["valid"]
+
+
 def test_missing_required_observation_elements():
     outcome = validate_fhir({"resourceType": "Observation", "id": "o1"})
     assert not outcome["valid"]
@@ -44,7 +49,8 @@ def test_resolved_bundle_references():
     result = validate_fhir(bundle)
     assert result["valid"], result
     assert result["resources_checked"] == 3
-    assert not result["operationOutcome"]["issue"]
+    assert not codes(result, "error")
+    assert not codes(result, "warning")
 
 
 def test_unresolved_uuid_and_duplicate_fullurl():
