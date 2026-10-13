@@ -130,22 +130,48 @@ function inspect(resource) {
           if(typeof entry.fullUrl!=="string" || !entry.fullUrl.trim())
             add("error","invalid","fullUrl must be a non-empty string.",path+".fullUrl");
           else {
-            if(seen.has(entry.fullUrl) && resource.type!=="history")
-              add("error","duplicate","Duplicate Bundle.entry.fullUrl.",path+".fullUrl");
-            seen.add(entry.fullUrl);targets.add(entry.fullUrl);
+            const version=entry.resource && entry.resource.meta && typeof entry.resource.meta.versionId==="string" ? entry.resource.meta.versionId:"";
+            const key=JSON.stringify([entry.fullUrl,version]);
+            if(seen.has(key) && resource.type!=="history")
+              add("error","duplicate","Duplicate Bundle.entry.fullUrl and resource version.",path+".fullUrl");
+            seen.add(key);targets.add(entry.fullUrl);
+            if(entry.fullUrl.includes("/_history/"))
+              add("error","invalid","fullUrl cannot be version-specific.",path+".fullUrl");
           }
         }
         if(entry.resource !== undefined && entry.resource !== null) {
           if(checkResource(entry.resource,path+".resource") && typeof entry.resource.id==="string")
             targets.add(entry.resource.resourceType+"/"+entry.resource.id);
         }
-        if(resource.type==="batch" || resource.type==="transaction") {
-          const req=entry.request;
-          if(!req || typeof req!=="object" || Array.isArray(req) ||
-             typeof req.method!=="string" || !req.method || typeof req.url!=="string" || !req.url)
-            add("error","required","Batch and transaction entries need request.method and request.url.",path+".request");
-        }
+        const needsRequest=["batch","transaction","history"].includes(resource.type);
+        const needsResponse=["batch-response","transaction-response","history"].includes(resource.type);
+        const req=entry.request, response=entry.response;
+        if(needsRequest && (!req || typeof req!=="object" || Array.isArray(req) ||
+           typeof req.method!=="string" || !req.method || typeof req.url!=="string" || !req.url))
+          add("error","required","This Bundle type requires request.method and request.url.",path+".request");
+        else if(!needsRequest && req!==undefined && req!==null)
+          add("error","structure","request is not allowed for this Bundle type.",path+".request");
+        if(needsResponse && (!response || typeof response!=="object" || Array.isArray(response)))
+          add("error","required","This Bundle type requires entry.response.",path+".response");
+        else if(!needsResponse && response!==undefined && response!==null)
+          add("error","structure","response is not allowed for this Bundle type.",path+".response");
+        if(entry.search!==undefined && entry.search!==null && resource.type!=="searchset")
+          add("error","structure","entry.search is only allowed in searchsets.",path+".search");
+        if(entry.resource===undefined && req===undefined && response===undefined)
+          add("error","required","Bundle entry needs a resource, request, or response.",path);
       }
+      if(resource.total!==undefined && resource.total!==null && !["searchset","history"].includes(resource.type))
+        add("error","structure","Bundle.total is only permitted for search or history.","resource.total");
+      if(resource.type==="document") {
+        if(!resource.identifier || !resource.identifier.system || !resource.identifier.value)
+          add("error","required","Document Bundle requires identifier.system and identifier.value.","resource.identifier");
+        if(!resource.timestamp)
+          add("error","required","Document Bundle requires timestamp.","resource.timestamp");
+        if(!entries.length)
+          add("error","required","Document Bundle requires a first Composition entry.","resource.entry");
+      }
+      if(resource.type==="message" && !entries.length)
+        add("error","required","Message Bundle requires a first MessageHeader entry.","resource.entry");
       for(const [type,firstType] of [["document","Composition"],["message","MessageHeader"]]) {
         if(resource.type===type && entries.length &&
           (!entries[0] || !entries[0].resource || entries[0].resource.resourceType!==firstType))
