@@ -117,7 +117,7 @@ def validate_fhir(resource: Any) -> dict:
                     full_versions.add(version_key)
                     internal_targets.add(url)
                     if "/_history/" in url:
-                        add("error", "invalid", "fullUrl cannot be version-specific.", path + ".fullUrl)
+                        add("error", "invalid", "fullUrl cannot be version-specific.", path + ".fullUrl")
             item = entry.get("resource")
             if item is not None:
                 if validate_resource(item, path + ".resource") and isinstance(item.get("id"), str):
