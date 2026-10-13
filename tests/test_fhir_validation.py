@@ -114,3 +114,45 @@ def test_api_fhir_validation():
     invalid = client.post("/api/fhir/validate", json={"resourceType": "Observation"})
     assert invalid.status_code == 200
     assert not invalid.json()["valid"]
+
+
+def test_csv_boolean_parser():
+    from fhir_validation import parse_csv_boolean
+    for value in ("false", "False", "0", "no", "", False):
+        assert parse_csv_boolean(value) is False
+    for value in ("true", "True", "1", "yes", True):
+        assert parse_csv_boolean(value) is True
+    with pytest.raises(ValueError):
+        parse_csv_boolean("maybe")
+
+
+def test_legacy_cli_batch_does_not_treat_false_as_critical(tmp_path, monkeypatch):
+    import csv
+    from cli import main
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "in.csv").write_text(
+        "task_id,target_identifier,primary_metric,secondary_metric,is_critical_flag,status_descriptor\n"
+        "T1,KEY-1,1,1,False,NOMINAL\n", encoding="utf-8")
+    assert main(["batch", "-i", "in.csv", "-o", "out.csv"]) == 0
+    with (tmp_path / "out.csv").open(newline="", encoding="utf-8") as f:
+        result = next(csv.DictReader(f))
+    assert result["overall_urgency"] == "ROUTINE"
+
+
+def test_validate_fhir_cli_end_to_end(tmp_path, monkeypatch, capsys):
+    import json
+    from cli import main
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "patient.json").write_text('{"resourceType":"Patient","id":"example"}', encoding="utf-8")
+    assert main(["validate-fhir", "-i", "patient.json"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["valid"] is True
+
+
+def test_audit_log_return_is_defensive_copy():
+    from agents.base import AuditTrail
+    log = AuditTrail(secret_key="test-key")
+    log.log("actor", "tier", "EVENT", {"ok": True})
+    copy = log.get_trail()
+    copy[0]["current_hash"] = "tampered"
+    assert log.verify_integrity()
