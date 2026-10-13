@@ -1,27 +1,35 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "fhir-r4-semantic-validator-engine"
-version = "2.0.0"
-description = "FHIR-Validator Pro: Autonomous FHIR R4 Bundle Semantic & Profile Conformance Engine"
+version = "2.0.1"
+description = "Local FHIR R4 JSON structural/reference checks and legacy metric-audit CLI"
 readme = "README.md"
-authors = [{ name = "Dr. Abu Suraih Sakhri", email = "abusuraih@example.com" }]
-license = { text = "MIT" }
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Dr. Abu Suraih Sakhri"}]
+dependencies = ["pydantic>=2,<3"]
 classifiers = [
-    "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent",
-    "Topic :: Scientific/Engineering :: Medical Science Apps.",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Topic :: Scientific/Engineering :: Medical Science Apps.",
 ]
-requires-python = ">=3.9"
-dependencies = []
+
+[project.optional-dependencies]
+api = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1"]
+test = ["pytest>=8,<10", "httpx>=0.27,<1"]
 
 [project.scripts]
 fhir-r4-semantic-validator-engine = "fhir_r4_semantic_validator_agent.cli:main"
+fhir-validator = "cli:main"
 
 [project.urls]
-Homepage = "https://github.com/abusuraihsakhri/fhir-r4-semantic-validator-engine"
-Repository = "https://github.com/abusuraihsakhri/fhir-r4-semantic-validator-engine.git"
+Homepage = "https://github.com/abusuraihsakhri/fhir-r4-semantic-validator-agent"
+Repository = "https://github.com/abusuraihsakhri/fhir-r4-semantic-validator-agent"
+
+[tool.setuptools]
+packages = ["agents", "fhir_r4_semantic_validator_agent"]
+py-modules = ["cli", "fhir_validation", "fhir_validator_pro", "enrichment", "simulator"]
