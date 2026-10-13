@@ -3,13 +3,24 @@ Command Line Interface for Fhir R4 Semantic Validator Agent.
 """
 import argparse
 import csv
+import json
 import os
 import sys
 from agents.models import SystemTaskPayload
 from agents.supervisor import SystemSupervisor
 from agents.base import AuditLogger, validate_safe_path
+from fhir_validation import validate_fhir
 
 supervisor = SystemSupervisor(model_provider="mock")
+
+
+def _csv_bool(value: str) -> bool:
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "n", "off", ""}:
+        return False
+    raise ValueError("Expected a boolean value such as true/false or 1/0")
 
 
 def main(argv=None):
@@ -33,6 +44,10 @@ def main(argv=None):
     p_batch = subparsers.add_parser("batch", help="Batch process CSV records")
     p_batch.add_argument("-i", "--input", required=True)
     p_batch.add_argument("-o", "--output", default="results.csv")
+
+    # FHIR R4 JSON structural and reference checks
+    p_fhir = subparsers.add_parser("validate-fhir", help="Check a local FHIR R4 JSON resource or Bundle")
+    p_fhir.add_argument("-i", "--input", required=True, help="JSON file below current working directory")
 
     # Verify Audit
     subparsers.add_parser("verify-audit", help="Verify HMAC audit trail integrity")
@@ -79,6 +94,19 @@ def main(argv=None):
         print(f"Audit Trail Blocks: {len(trail)} | Cryptographic Integrity Verified: {valid}")
         return 0
 
+    if args.command == "validate-fhir":
+        path = validate_safe_path(args.input, allowed_base=os.getcwd())
+        if os.path.getsize(path) > 5 * 1024 * 1024:
+            parser.error("FHIR JSON input must be at most 5 MiB")
+        try:
+            with open(path, encoding="utf-8") as f:
+                resource = json.load(f)
+        except (ValueError, UnicodeError) as exc:
+            parser.error(f"Invalid JSON input: {type(exc).__name__}")
+        result = validate_fhir(resource)
+        print(json.dumps(result, indent=2))
+        return 0 if result["valid"] else 2
+
     if args.command == "batch":
         safe_input = validate_safe_path(args.input, allowed_base=os.getcwd())
         safe_output = validate_safe_path(args.output, allowed_base=os.getcwd())
@@ -96,7 +124,7 @@ def main(argv=None):
                 primary_metric=float(r.get("primary_metric", 15.0)),
                 secondary_metric=float(r.get("secondary_metric", 5.0)),
                 status_descriptor=r.get("status_descriptor", "NOMINAL"),
-                is_critical_flag=bool(r.get("is_critical_flag", False)),
+                is_critical_flag=_csv_bool(r.get("is_critical_flag", False)),
             )
             dossier = supervisor.process_task(payload)
             row_dict = dict(r)
