@@ -44,7 +44,7 @@ For minimal CLI installation: `python -m pip install -e .`.
 
 ```bash
 # JSON file must be inside the current working directory (max 5 MiB)
-fhir-validator validate-fhir -i sample_payload.json
+fhir-validator validate-fhir -i sample_fhir_bundle.json
 
 # Legacy metric-based evaluation, retained for compatibility
 fhir-validator audit --task-id TASK-001 --target KEY-01 --primary 28.5 --secondary 14.2 --critical --status DISCORDANT
