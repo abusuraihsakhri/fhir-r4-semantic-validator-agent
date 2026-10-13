@@ -173,3 +173,15 @@ def _result(issues: list, checked: int, errors_found: int) -> dict:
         "issue_count": len(issues),
         "operationOutcome": {"resourceType": "OperationOutcome", "issue": issues or [{"severity": "information", "code": "informational", "details": {"text": "No issues detected by the limited checker."}}]},
     }
+
+
+def parse_csv_boolean(value: Any) -> bool:
+    """Strictly parse CSV booleans, rejecting ambiguous critical flags."""
+    if isinstance(value, bool):
+        return value
+    token = str(value).strip().lower()
+    if token in ("true", "1", "yes", "y", "on"):
+        return True
+    if token in ("false", "0", "no", "n", "off", ""):
+        return False
+    raise ValueError("Expected a boolean value such as true/false or 1/0")
