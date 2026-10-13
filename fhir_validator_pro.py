@@ -16,6 +16,7 @@ import sys
 import uuid
 from enum import Enum
 from typing import Dict, Any, List, Optional
+from fhir_validation import parse_csv_boolean
 
 
 class Severity(str, Enum):
@@ -89,7 +90,7 @@ class TerminologyBindingAuditorAgent:
     """Specialized Sub-Agent 2 for fhir-r4-semantic-validator-agent"""
     def evaluate(self, payload: Dict[str, Any]) -> List[AgentAlert]:
         alerts = []
-        is_critical = bool(payload.get("critical_flag", False))
+        is_critical = parse_csv_boolean(payload.get("critical_flag", False))
         val2 = float(payload.get("metric_secondary", 5.0))
         if is_critical or val2 > 12.0:
             alerts.append(
@@ -271,7 +272,7 @@ def main(argv=None):
         input_path = os.path.realpath(args.input)
         output_path = os.path.realpath(args.output)
         cwd = os.getcwd()
-        if not input_path.startswith(cwd) or not output_path.startswith(cwd):
+        if os.path.commonpath([cwd, input_path]) != cwd or os.path.commonpath([cwd, output_path]) != cwd:
             print(f"ERROR: Input and output paths must reside within the working directory '{cwd}'.")
             return 1
         with open(input_path, mode="r", encoding="utf-8-sig") as f:

@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from .base import AuditLogger, SecurityException
 from .models import SystemTaskPayload
 from .supervisor import SystemSupervisor
+from fhir_validation import validate_fhir
 
 supervisor = SystemSupervisor(model_provider="mock")
 
@@ -60,3 +61,9 @@ def api_chat(req: ChatRequest):
 @app.get("/api/audit/logs")
 def api_audit_logs():
     return {"audit_trail": AuditLogger.get_trail(), "verified": AuditLogger.verify_integrity()}
+
+
+@app.post("/api/fhir/validate")
+def api_fhir_validate(resource: Dict[str, Any]):
+    """Local JSON structural checks, not full HL7 profile or terminology validation."""
+    return validate_fhir(resource)

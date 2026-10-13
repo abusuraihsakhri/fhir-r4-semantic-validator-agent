@@ -7,6 +7,7 @@ import os
 import sys
 from .models import ClinicalCasePayload
 from .agents import FHIRValidatorCoordinator
+from fhir_validation import parse_csv_boolean
 
 coordinator = FHIRValidatorCoordinator()
 
@@ -72,7 +73,7 @@ def main(argv=None):
         input_path = os.path.realpath(args.input)
         output_path = os.path.realpath(args.output)
         cwd = os.getcwd()
-        if not input_path.startswith(cwd) or not output_path.startswith(cwd):
+        if os.path.commonpath([cwd, input_path]) != cwd or os.path.commonpath([cwd, output_path]) != cwd:
             print(f"ERROR: Input and output paths must reside within the working directory '{cwd}'.")
             return 1
         with open(input_path, mode="r", encoding="utf-8-sig") as f:
@@ -89,7 +90,7 @@ def main(argv=None):
                 primary_metric=float(r.get("metric_primary", r.get("primary_metric", 15.0))),
                 secondary_metric=float(r.get("metric_secondary", r.get("secondary_metric", 5.0))),
                 status_flag=r.get("status_flag", r.get("status_text", "NORMAL")),
-                is_stat=bool(r.get("is_stat", r.get("critical_flag", False))),
+                is_stat=parse_csv_boolean(r.get("is_stat", r.get("critical_flag", False))),
             )
             dossier = coordinator.process_case(case)
             row_dict = dict(r)
