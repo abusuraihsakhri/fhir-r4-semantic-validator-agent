@@ -84,7 +84,7 @@ def validate_fhir(resource: Any) -> dict:
 
     kind = resource["resourceType"]
     entries = []
-    full_urls = set()
+    full_versions = set()
     internal_targets = set()
     if kind == "Bundle":
         if not isinstance(resource.get("type"), str) or resource["type"] not in _BUNDLE_TYPES:
@@ -106,18 +106,52 @@ def validate_fhir(resource: Any) -> dict:
                 if not isinstance(url, str) or not url.strip():
                     add("error", "invalid", "fullUrl must be a non-empty string.", path + ".fullUrl")
                 else:
-                    if url in full_urls and resource.get("type") != "history":
-                        add("error", "duplicate", "Duplicate Bundle.entry.fullUrl.", path + ".fullUrl")
-                    full_urls.add(url)
+                    version = ""
+                    item_meta = entry.get("resource", {})
+                    if isinstance(item_meta, dict) and isinstance(item_meta.get("meta"), dict):
+                        v = item_meta["meta"].get("versionId")
+                        version = v if isinstance(v, str) else ""
+                    version_key = (url, version)
+                    if version_key in full_versions and resource.get("type") != "history":
+                        add("error", "duplicate", "Duplicate Bundle.entry.fullUrl and resource version.", path + ".fullUrl")
+                    full_versions.add(version_key)
                     internal_targets.add(url)
+                    if "/_history/" in url:
+                        add("error", "invalid", "fullUrl cannot be version-specific.", path + ".fullUrl)
             item = entry.get("resource")
             if item is not None:
                 if validate_resource(item, path + ".resource") and isinstance(item.get("id"), str):
                     internal_targets.add(item["resourceType"] + "/" + item["id"])
-            if isinstance(resource.get("type"), str) and resource["type"] in {"batch", "transaction"}:
-                req = entry.get("request")
+            bundle_type = resource.get("type")
+            requires_request = bundle_type in ("batch", "transaction", "history")
+            requires_response = bundle_type in ("batch-response", "transaction-response", "history")
+            req = entry.get("request")
+            response = entry.get("response")
+            if requires_request:
                 if not isinstance(req, dict) or not all(isinstance(req.get(x), str) and req[x] for x in ("method", "url")):
-                    add("error", "required", "Batch and transaction entries need request.method and request.url.", path + ".request")
+                    add("error", "required", "This Bundle type requires request.method and request.url.", path + ".request")
+            elif req is not None:
+                add("error", "structure", "request is not allowed for this Bundle type.", path + ".request")
+            if requires_response and not isinstance(response, dict):
+                add("error", "required", "This Bundle type requires entry.response.", path + ".response")
+            elif not requires_response and response is not None:
+                add("error", "structure", "response is not allowed for this Bundle type.", path + ".response")
+            if entry.get("search") is not None and bundle_type != "searchset":
+                add("error", "structure", "entry.search is only allowed in searchsets.", path + ".search")
+            if item is None and req is None and response is None:
+                add("error", "required", "Bundle entry needs a resource, request, or response.", path)
+        if resource.get("total") is not None and resource.get("type") not in ("searchset", "history"):
+            add("error", "structure", "Bundle.total is only permitted for search or history.", "resource.total")
+        if resource.get("type") == "document":
+            identifier = resource.get("identifier")
+            if not isinstance(identifier, dict) or not identifier.get("system") or not identifier.get("value"):
+                add("error", "required", "Document Bundle requires identifier.system and identifier.value.", "resource.identifier")
+            if not resource.get("timestamp"):
+                add("error", "required", "Document Bundle requires timestamp.", "resource.timestamp")
+            if not entries:
+                add("error", "required", "Document Bundle requires a first Composition entry.", "resource.entry")
+        if resource.get("type") == "message" and not entries:
+            add("error", "required", "Message Bundle requires a first MessageHeader entry.", "resource.entry")
         if resource.get("type") == "document" and entries:
             first = entries[0]
             if not isinstance(first, dict) or not isinstance(first.get("resource"), dict) or first["resource"].get("resourceType") != "Composition":
