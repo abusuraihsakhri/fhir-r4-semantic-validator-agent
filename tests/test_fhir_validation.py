@@ -156,3 +156,20 @@ def test_audit_log_return_is_defensive_copy():
     copy = log.get_trail()
     copy[0]["current_hash"] = "tampered"
     assert log.verify_integrity()
+
+
+def test_fhir_r4_bundle_selected_invariants():
+    assert not validate_fhir({"resourceType": "Bundle", "type": "document", "entry": []})["valid"]
+    assert not validate_fhir({"resourceType": "Bundle", "type": "collection", "total": 1})["valid"]
+    assert not validate_fhir({"resourceType": "Bundle", "type": "collection", "entry": [{}]})["valid"]
+    assert not validate_fhir({"resourceType": "Bundle", "type": "history", "entry": [{"resource": {"resourceType": "Patient"}}]})["valid"]
+
+
+def test_versioned_bundle_fullurl_can_repeat_with_different_versions():
+    def entry(version):
+        return {"fullUrl": "https://example.org/fhir/Patient/1", "resource": {
+            "resourceType": "Patient", "id": "1", "meta": {"versionId": version}}}
+    bundle = {"resourceType": "Bundle", "type": "collection", "entry": [entry("1"), entry("2")]}
+    assert validate_fhir(bundle)["valid"]
+    bundle["entry"][1]["resource"]["meta"]["versionId"] = "1"
+    assert not validate_fhir(bundle)["valid"]
