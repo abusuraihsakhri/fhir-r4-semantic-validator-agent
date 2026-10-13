@@ -186,7 +186,7 @@ function inspect(resource) {
     }
   }
   return {valid:!issue.some(x=>x.severity==="error"),resources_checked:resourcesChecked,issue_count:issue.length,
-          operationOutcome:{resourceType:"OperationOutcome",issue}};
+          operationOutcome:{resourceType:"OperationOutcome",issue:issue.length?issue:[{severity:"information",code:"informational",details:{text:"No issues detected by the limited checker."}}]}};
 }
 function show(report) {
   lastReport=report;
