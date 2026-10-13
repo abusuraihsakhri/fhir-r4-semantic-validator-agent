@@ -29,3 +29,5 @@ jobs:
         run: |
           python -c "from pathlib import Path; s=Path('web/index.html').read_text(); Path('/tmp/fhir-ui.js').write_text(s.split('<script>')[1].split('</script>')[0])"
           node --check /tmp/fhir-ui.js
+          node tests/browser_check.cjs
+          python -m cli validate-fhir -i sample_fhir_bundle.json
