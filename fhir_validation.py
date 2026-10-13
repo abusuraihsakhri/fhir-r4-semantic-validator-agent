@@ -162,7 +162,7 @@ def validate_fhir(resource: Any) -> dict:
                     if isinstance(child, (dict, list)):
                         stack.append((f"{path}[{i}]", child))
 
-    return _result(issues, checked)
+    return _result(issues, checked, errors_found)
 
 
 def _result(issues: list, checked: int, errors_found: int) -> dict:
