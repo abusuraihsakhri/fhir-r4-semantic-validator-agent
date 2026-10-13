@@ -73,9 +73,10 @@ def validate_fhir(resource: Any) -> dict:
                     identifier = item.get("id")
                     if not identifier:
                         add("error", "required", "Contained resources need an id.", child_path + ".id")
-                    elif identifier in seen:
-                        add("error", "duplicate", "Duplicate contained resource id.", child_path + ".id")
-                    seen.add(identifier)
+                    elif isinstance(identifier, str):
+                        if identifier in seen:
+                            add("error", "duplicate", "Duplicate contained resource id.", child_path + ".id")
+                        seen.add(identifier)
         return True
 
     if not validate_resource(resource, "resource"):
@@ -86,7 +87,7 @@ def validate_fhir(resource: Any) -> dict:
     full_urls = set()
     internal_targets = set()
     if kind == "Bundle":
-        if resource.get("type") not in _BUNDLE_TYPES:
+        if not isinstance(resource.get("type"), str) or resource["type"] not in _BUNDLE_TYPES:
             add("error", "required", "Bundle.type must be a FHIR R4 bundle type.", "resource.type")
         entries = resource.get("entry", [])
         if not isinstance(entries, list):
@@ -113,7 +114,7 @@ def validate_fhir(resource: Any) -> dict:
             if item is not None:
                 if validate_resource(item, path + ".resource") and isinstance(item.get("id"), str):
                     internal_targets.add(item["resourceType"] + "/" + item["id"])
-            if resource.get("type") in {"batch", "transaction"}:
+            if isinstance(resource.get("type"), str) and resource["type"] in {"batch", "transaction"}:
                 req = entry.get("request")
                 if not isinstance(req, dict) or not all(isinstance(req.get(x), str) and req[x] for x in ("method", "url")):
                     add("error", "required", "Batch and transaction entries need request.method and request.url.", path + ".request")
@@ -134,7 +135,7 @@ def validate_fhir(resource: Any) -> dict:
             targets.append((f"resource.entry[{i}].resource", entry["resource"]))
     visited_nodes = 0
     for root_path, owner in targets:
-        ids = {r.get("id") for r in owner.get("contained", []) if isinstance(r, dict)} if isinstance(owner.get("contained", []), list) else set()
+        ids = {r["id"] for r in owner.get("contained", []) if isinstance(r, dict) and isinstance(r.get("id"), str)} if isinstance(owner.get("contained", []), list) else set()
         stack = [(root_path, owner)]
         while stack:
             path, node = stack.pop()
@@ -170,5 +171,5 @@ def _result(issues: list, checked: int, errors_found: int) -> dict:
         "valid": errors_found == 0,
         "resources_checked": checked,
         "issue_count": len(issues),
-        "operationOutcome": {"resourceType": "OperationOutcome", "issue": issues},
+        "operationOutcome": {"resourceType": "OperationOutcome", "issue": issues or [{"severity": "information", "code": "informational", "details": {"text": "No issues detected by the limited checker."}}]},
     }
