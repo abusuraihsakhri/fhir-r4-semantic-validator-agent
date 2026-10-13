@@ -28,8 +28,12 @@ def validate_fhir(resource: Any) -> dict:
     """Return an issue summary and FHIR R4 OperationOutcome; never echo input values."""
     issues = []
     checked = 0
+    errors_found = 0
 
     def add(severity: str, code: str, message: str, path: str) -> None:
+        nonlocal errors_found
+        if severity == "error":
+            errors_found += 1
         if len(issues) < _MAX_ISSUES:
             issues.append({
                 "severity": severity,
@@ -38,7 +42,7 @@ def validate_fhir(resource: Any) -> dict:
                 "expression": [path],
             })
 
-    def validate_resource(obj: Any, path: str) -> bool:
+    def validate_resource(obj: Any, path: str, depth: int = 0) -> bool:
         nonlocal checked
         if not isinstance(obj, dict):
             add("error", "structure", "Resource must be a JSON object.", path)
@@ -59,11 +63,13 @@ def validate_fhir(resource: Any) -> dict:
         contained = obj.get("contained", [])
         if not isinstance(contained, list):
             add("error", "structure", "contained must be an array.", path + ".contained")
+        elif depth > 0 and contained:
+            add("error", "structure", "Nested contained resources are not supported.", path + ".contained")
         else:
             seen = set()
             for i, item in enumerate(contained[:_MAX_ENTRIES]):
                 child_path = f"{path}.contained[{i}]"
-                if validate_resource(item, child_path) and isinstance(item, dict):
+                if validate_resource(item, child_path, depth + 1) and isinstance(item, dict):
                     identifier = item.get("id")
                     if not identifier:
                         add("error", "required", "Contained resources need an id.", child_path + ".id")
@@ -73,7 +79,7 @@ def validate_fhir(resource: Any) -> dict:
         return True
 
     if not validate_resource(resource, "resource"):
-        return _result(issues, checked)
+        return _result(issues, checked, errors_found)
 
     kind = resource["resourceType"]
     entries = []
@@ -139,6 +145,8 @@ def validate_fhir(resource: Any) -> dict:
                 break
             if isinstance(node, dict):
                 for key, value in node.items():
+                    if path == "resource" and kind == "Bundle" and key == "entry":
+                        continue
                     child = path + "." + key
                     if key == "reference" and isinstance(value, str):
                         if value.startswith("#") and value[1:] not in ids:
@@ -157,9 +165,9 @@ def validate_fhir(resource: Any) -> dict:
     return _result(issues, checked)
 
 
-def _result(issues: list, checked: int) -> dict:
+def _result(issues: list, checked: int, errors_found: int) -> dict:
     return {
-        "valid": not any(issue["severity"] == "error" for issue in issues),
+        "valid": errors_found == 0,
         "resources_checked": checked,
         "issue_count": len(issues),
         "operationOutcome": {"resourceType": "OperationOutcome", "issue": issues},
