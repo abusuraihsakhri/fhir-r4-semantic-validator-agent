@@ -1,5 +1,7 @@
 # FHIR R4 Semantic Validator Agent
 
+### [Open the Live Application →](https://abusuraihsakhri.github.io/fhir-r4-semantic-validator-agent/)
+
 A local FHIR R4 JSON checker with a browser interface and Python CLI/API.
 The repository also preserves its earlier **metric-based supervisor**, which is separate
 from FHIR validation and is **not** a FHIR conformance engine.
@@ -25,9 +27,7 @@ with the required R4 and implementation-guide packages.
 Open `web/index.html`, paste JSON or load a .json file (up to 5 MiB), and select
 **Validate locally**. Review findings, then download the OperationOutcome report.
 This runs entirely in the browser with JavaScript; no Python runtime, account, server,
-or external API is needed. The same static files can be hosted on GitHub Pages.
-A Pages deployment workflow is included, but a live URL should only be advertised
-after deployment and functional verification.
+or external API is needed. The static checker is published via the GitHub Pages deployment workflow.
 
 ## Python installation
 
